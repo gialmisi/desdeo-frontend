@@ -292,11 +292,7 @@ function ReferencePointMethod({
                 </Button>
               )}
               {loading && (
-                <Button
-                  disabled={true}
-                  size={"lg"}
-                  variant={"info"}
-                >
+                <Button disabled={true} size={"lg"} variant={"info"}>
                   {"Working... "}
                   <ReactLoading
                     type={"bubbles"}

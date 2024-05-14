@@ -11,6 +11,10 @@ import ProblemExplore from "./views/ProblemExplore";
 import ReferencePointMethod from "./views/ReferencePointMethod";
 import NimbusMethod from "./views/NimbusMethod";
 import NautilusNavigatorMethod from "./views/NautilusNavigatorMethod";
+import RVEAMethod from "./views/RVEAMethod";
+import IRVEAMethod from "./views/IRVEAMethod";
+import IOPISMethod from "./views/IOPISMethod";
+import RVEAClassificationMethod from "./views/RVEAClassificationMethod";
 import MethodCreate from "./views/MethodCreate";
 import Questionnaire from "./views/Questionnaire";
 import { Tokens } from "./types/AppTypes";
@@ -129,6 +133,46 @@ function App() {
             )}
             {chosenMethod === "nautilus_navigator" && (
               <NautilusNavigatorMethod
+                apiUrl={API_URL}
+                isLoggedIn={isLoggedIn}
+                loggedAs={loggedAs}
+                tokens={tokens}
+                methodCreated={methodCreated}
+                activeProblemId={activeProblemId}
+              />
+            )}
+            {chosenMethod === "rvea" && (
+              <RVEAMethod
+                apiUrl={API_URL}
+                isLoggedIn={isLoggedIn}
+                loggedAs={loggedAs}
+                tokens={tokens}
+                methodCreated={methodCreated}
+                activeProblemId={activeProblemId}
+              />
+            )}
+            {chosenMethod === "irvea" && (
+              <IRVEAMethod
+                apiUrl={API_URL}
+                isLoggedIn={isLoggedIn}
+                loggedAs={loggedAs}
+                tokens={tokens}
+                methodCreated={methodCreated}
+                activeProblemId={activeProblemId}
+              />
+            )}
+            {chosenMethod === "iopis" && (
+              <IOPISMethod
+                apiUrl={API_URL}
+                isLoggedIn={isLoggedIn}
+                loggedAs={loggedAs}
+                tokens={tokens}
+                methodCreated={methodCreated}
+                activeProblemId={activeProblemId}
+              />
+            )}
+            {chosenMethod === "rvea/class" && (
+              <RVEAClassificationMethod
                 apiUrl={API_URL}
                 isLoggedIn={isLoggedIn}
                 loggedAs={loggedAs}

@@ -15,7 +15,7 @@ import SolutionTable from "../components/SolutionTable";
 import SolutionTableMultiSelect from "../components/SolutionTableMultiSelect";
 import { Link } from "react-router-dom";
 
-interface NimbusMethodProps {
+interface RVEAMethodProps {
   isLoggedIn: boolean;
   loggedAs: string;
   tokens: Tokens;
@@ -25,22 +25,21 @@ interface NimbusMethodProps {
 }
 
 type Classification = "<" | "<=" | ">=" | "=" | "0";
-type NimbusState =
+type RVEAState =
   | "not started"
   | "classification"
   | "archive"
-  | "intermediate"
   | "select preferred"
   | "stop";
 
-function NimbusMethod({
+function RVEAClassificationMethod({
   isLoggedIn,
   loggedAs,
   tokens,
   apiUrl,
   methodCreated,
   activeProblemId,
-}: NimbusMethodProps) {
+}: RVEAMethodProps) {
   const [activeProblemInfo, SetActiveProblemInfo] = useState<ProblemInfo>();
   const [methodStarted, SetMethodStarted] = useState<boolean>(false);
   const [helpMessage, SetHelpMessage] = useState<string>(
@@ -49,17 +48,15 @@ function NimbusMethod({
   const [preferredPoint, SetPreferredPoint] = useState<number[]>([]);
   const [fetchedInfo, SetFetchedInfo] = useState<boolean>(false);
   const [loading, SetLoading] = useState<boolean>(false);
-  const [nimbusState, SetNimbusState] = useState<NimbusState>("not started");
+  const [RVEAState, SetRVEAState] = useState<RVEAState>("not started");
   const [classifications, SetClassifications] = useState<Classification[]>([]);
   const [classificationLevels, SetClassificationLevels] = useState<number[]>(
     []
   );
   const [classificationOk, SetClassificationOk] = useState<boolean>(false);
-  const [numberOfSolutions, SetNumberOfSolutions] = useState<number>(1);
   const [newSolutions, SetNewSolutions] = useState<ObjectiveData>();
   const [selectedIndices, SetSelectedIndices] = useState<number[]>([]);
-  const [computeIntermediate, SetComputeIntermediate] =
-    useState<boolean>(false);
+
   const [cont, SetCont] = useState<boolean>(true);
   const [finalVariables, SetFinalVariables] = useState<number[]>([]);
 
@@ -143,10 +140,11 @@ function NimbusMethod({
         if (res.status == 200) {
           const body = await res.json();
           SetMethodStarted(true);
-          SetPreferredPoint([...body.response.objective_values]); // make copy to avoid aliasing
-          SetClassificationLevels(body.response.objective_values);
-          SetHelpMessage("Please classify each of the shown objectives.");
-          SetNimbusState("classification");
+          SetNewSolutions(ParseSolutions(body.objectives, activeProblemInfo!));
+          SetHelpMessage(
+            "Select the solutions you would like to be saved for later viewing."
+          );
+          SetRVEAState("archive");
         }
       } catch (e) {
         console.log("not ok, could not start the method");
@@ -161,7 +159,7 @@ function NimbusMethod({
     // Attempt to iterate
     SetLoading(true);
 
-    switch (nimbusState) {
+    switch (RVEAState) {
       case "classification": {
         if (!classificationOk) {
           // classification not ok, do nothing
@@ -182,22 +180,24 @@ function NimbusMethod({
               response: {
                 classifications: classifications,
                 levels: classificationLevels,
-                number_of_solutions: numberOfSolutions,
+                current_solution: preferredPoint,
+                preference_type: 5,
+                stage: "classification",
               },
+              preference_type: 5,
             }),
           });
 
           if (res.status === 200) {
             // ok
             const body = await res.json();
-            const response = body.response;
             SetNewSolutions(
-              ParseSolutions(response.objectives, activeProblemInfo!)
+              ParseSolutions(body.objectives, activeProblemInfo!)
             );
             SetHelpMessage(
               "Select the solutions you would like to be saved for later viewing."
             );
-            SetNimbusState("archive");
+            SetRVEAState("archive");
             break;
           } else {
             // not ok
@@ -206,7 +206,7 @@ function NimbusMethod({
             break;
           }
         } catch (e) {
-          console.log("Could not iterate NIMBUS");
+          console.log("Could not iterate RVEA");
           console.log(e);
           // do nothing
           break;
@@ -223,32 +223,26 @@ function NimbusMethod({
             body: JSON.stringify({
               response: {
                 indices: selectedIndices,
+                stage: "archive",
               },
+              preference_type: 10,
             }),
           });
           if (res.status === 200) {
             const body = await res.json();
             const response = body.response;
-
             // update the solutions to be shown
-            const toBeShown = ParseSolutions(
-              response.objectives,
-              activeProblemInfo!
-            );
+            const toBeShown = ParseSolutions(response, activeProblemInfo!);
             SetNewSolutions(toBeShown);
-            console.log(`!!!!!!!!!!!!!!!!!!`);
             console.log(toBeShown);
 
             // reset the active selection
             SetSelectedIndices([]);
 
-            // reset the number of solutions
-            SetNumberOfSolutions(1);
-
             SetHelpMessage(
-              "Would you like to compute intermediate solutions between two previously computed solutions?"
+              "Please select the solution you prefer the most from the shown solution."
             );
-            SetNimbusState("intermediate");
+            SetRVEAState("select preferred");
             break;
           } else {
             // not ok
@@ -257,77 +251,7 @@ function NimbusMethod({
             return;
           }
         } catch (e) {
-          console.log("Could not iterate NIMBUS");
-          console.log(e);
-          // do nothing
-          break;
-        }
-      }
-      case "intermediate": {
-        if (computeIntermediate && selectedIndices.length !== 2) {
-          SetHelpMessage(
-            "Please select two on the shown solutions between which you would like to see intermediate solutions."
-          );
-          // do nothing
-          break;
-        }
-        try {
-          const res = await fetch(`${apiUrl}/method/control`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${tokens.access}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              response: {
-                indices: computeIntermediate ? selectedIndices : [],
-                number_of_desired_solutions: computeIntermediate
-                  ? numberOfSolutions
-                  : 0,
-              },
-            }),
-          });
-
-          if (res.status === 200) {
-            // ok
-            const body = await res.json();
-            // const response = JSON.parse(body.response);
-            const response = body.response;
-
-            if (computeIntermediate) {
-              // update solutions to be shown
-              const toBeShown = ParseSolutions(
-                response.objectives,
-                activeProblemInfo!
-              );
-              SetNewSolutions(toBeShown);
-
-              // reset and ask to save next
-              SetComputeIntermediate(false);
-              SetSelectedIndices([]);
-              SetNumberOfSolutions(1);
-              SetHelpMessage(
-                "Would you like to save any of the shown solutions for later viewing?"
-              );
-              SetNimbusState("archive");
-            } else {
-              SetComputeIntermediate(false);
-              SetSelectedIndices([]);
-              SetNumberOfSolutions(1);
-              SetHelpMessage(
-                "Please select the solution you prefer the most from the shown solution."
-              );
-              SetNimbusState("select preferred");
-            }
-            break;
-          } else {
-            // not ok
-            console.log(`Got response code ${res.status}`);
-            // do nothing
-            break;
-          }
-        } catch (e) {
-          console.log("Could not iterate NIMBUS");
+          console.log("Could not iterate RVEA");
           console.log(e);
           // do nothing
           break;
@@ -349,8 +273,9 @@ function NimbusMethod({
             body: JSON.stringify({
               response: {
                 index: selectedIndices[0],
-                continue: cont,
+                stage: "select",
               },
+              preference_type: 10,
             }),
           });
 
@@ -358,18 +283,16 @@ function NimbusMethod({
             // Ok
             const body = await res.json();
             const response = body.response;
-
+            console.log(response);
             if (cont) {
               // continue iterating
-              SetPreferredPoint([...response.objective_values]); // avoid aliasing
-              SetClassificationLevels(response.objective_values);
-              SetClassifications(
-                response.objective_values.map(() => "=" as Classification)
-              );
+              SetPreferredPoint([...response]); // avoid aliasing
+              SetClassificationLevels(response);
+              SetClassifications(response.map(() => "=" as Classification));
 
               SetSelectedIndices([]);
               SetHelpMessage("Please classify each of the shown objectives.");
-              SetNimbusState("classification");
+              SetRVEAState("classification");
               break;
             } else {
               // stop iterating
@@ -377,7 +300,7 @@ function NimbusMethod({
               SetPreferredPoint(response.objective);
               SetFinalVariables(response.solution);
               SetHelpMessage("Stopped. Showing final solution reached.");
-              SetNimbusState("stop");
+              SetRVEAState("stop");
               break;
             }
           } else {
@@ -387,7 +310,7 @@ function NimbusMethod({
             break;
           }
         } catch (e) {
-          console.log("Could not iterate NIMBUS");
+          console.log("Could not iterate RVEA");
           console.log(e);
           // do nothing
           break;
@@ -401,17 +324,8 @@ function NimbusMethod({
     SetLoading(false);
   };
 
-  // only allow two selected indices at any given time in the 'intermediate' state, and one index at any given time in the
-  //
   useEffect(() => {
-    if (nimbusState === "intermediate") {
-      if (selectedIndices.length < 3) {
-        // do nothing
-        return;
-      }
-      SetSelectedIndices(selectedIndices.slice(1));
-      return;
-    } else if (nimbusState === "select preferred") {
+    if (RVEAState === "select preferred") {
       if (selectedIndices.length === 1 || selectedIndices.length === 0) {
         // do nothing
         return;
@@ -422,7 +336,7 @@ function NimbusMethod({
   }, [selectedIndices]);
 
   useEffect(() => {
-    if (nimbusState === "not started") {
+    if (RVEAState === "not started") {
       // do nothing if not started
       return;
     }
@@ -522,7 +436,7 @@ function NimbusMethod({
     <Container>
       <Row>
         <Col sm={12}>
-          <h3>Synchronous NIMBUS</h3>
+          <h3>RVEA With Classification PIS</h3>
         </Col>
         <Col sm={2}></Col>
         <Col sm={8}>
@@ -531,55 +445,38 @@ function NimbusMethod({
         <Col sm={2}></Col>
         <Col sm={4}></Col>
         <Col sm={4}>
-          {!loading && nimbusState !== "stop" && (
+          {!loading && RVEAState !== "stop" && (
             <Button
               size={"lg"}
               onClick={iterate}
               disabled={
-                (nimbusState === "classification" && !classificationOk) ||
-                (nimbusState === "intermediate" &&
-                  computeIntermediate &&
-                  selectedIndices.length !== 2) ||
-                (nimbusState === "select preferred" &&
+                (RVEAState === "classification" && !classificationOk) ||
+                (RVEAState === "select preferred" &&
                   selectedIndices.length !== 1)
               }
             >
-              {nimbusState === "classification" &&
-                classificationOk &&
-                "Iterate"}
-              {nimbusState === "classification" &&
+              {RVEAState === "classification" && classificationOk && "Iterate"}
+              {RVEAState === "classification" &&
                 !classificationOk &&
                 "Check the classifications"}
-              {nimbusState === "archive" &&
-                selectedIndices.length > 0 &&
-                "Save"}
-              {nimbusState === "archive" &&
+              {RVEAState === "archive" && selectedIndices.length > 0 && "Save"}
+              {RVEAState === "archive" &&
                 selectedIndices.length === 0 &&
                 "Continue"}
-              {nimbusState === "intermediate" &&
-                computeIntermediate &&
-                selectedIndices.length === 2 &&
-                "Compute"}
-              {nimbusState === "intermediate" &&
-                computeIntermediate &&
-                selectedIndices.length !== 2 &&
-                "Select two solutions first"}
-              {nimbusState === "intermediate" &&
-                !computeIntermediate &&
-                "Continue"}
-              {nimbusState === "select preferred" &&
+
+              {RVEAState === "select preferred" &&
                 cont &&
                 selectedIndices.length === 1 &&
                 "Continue"}
-              {nimbusState === "select preferred" &&
+              {RVEAState === "select preferred" &&
                 cont &&
                 selectedIndices.length !== 1 &&
                 "Select a solution first"}
-              {nimbusState === "select preferred" &&
+              {RVEAState === "select preferred" &&
                 !cont &&
                 selectedIndices.length === 1 &&
                 "Stop"}
-              {nimbusState === "select preferred" &&
+              {RVEAState === "select preferred" &&
                 !cont &&
                 selectedIndices.length !== 1 &&
                 "Select a solution first"}
@@ -600,8 +497,8 @@ function NimbusMethod({
         </Col>
         <Col sm={4}></Col>
       </Row>
-      {nimbusState === "not started" && <div>Method not started yet</div>}
-      {nimbusState === "classification" && (
+      {RVEAState === "not started" && <div>Method not started yet</div>}
+      {RVEAState === "classification" && (
         <>
           <Row>
             <Col sm={12}>
@@ -613,40 +510,6 @@ function NimbusMethod({
                   <Form.Label column sm="12">
                     Desired number of solutions
                   </Form.Label>
-                  <Col sm={12}>
-                    <Form.Check
-                      inline
-                      label="1"
-                      type="radio"
-                      value={1}
-                      checked={numberOfSolutions === 1 ? true : false}
-                      onChange={() => SetNumberOfSolutions(1)}
-                    />
-                    <Form.Check
-                      inline
-                      label="2"
-                      type="radio"
-                      value={2}
-                      checked={numberOfSolutions === 2 ? true : false}
-                      onChange={() => SetNumberOfSolutions(2)}
-                    />
-                    <Form.Check
-                      inline
-                      label="3"
-                      type="radio"
-                      value={3}
-                      checked={numberOfSolutions === 3 ? true : false}
-                      onChange={() => SetNumberOfSolutions(3)}
-                    />
-                    <Form.Check
-                      inline
-                      label="4"
-                      type="radio"
-                      value={4}
-                      checked={numberOfSolutions === 4 ? true : false}
-                      onChange={() => SetNumberOfSolutions(4)}
-                    />
-                  </Col>
                 </Form.Group>
               </Form>
               <ClassificationsInputForm
@@ -681,7 +544,7 @@ function NimbusMethod({
           </Row>
         </>
       )}
-      {nimbusState === "archive" && (
+      {RVEAState === "archive" && (
         <>
           <Row>
             <Col sm={12}>
@@ -707,90 +570,7 @@ function NimbusMethod({
           </Row>
         </>
       )}
-      {nimbusState === "intermediate" && (
-        <>
-          <Row>
-            <Col sm={12}>
-              <h4 className={"mt-3"}>{"Archive and new solutions"}</h4>
-            </Col>
-            <Col sm={6}>
-              <Form>
-                <Form.Group as={Row}>
-                  <Form.Label column sm={8}>
-                    {"Would you like to see intermediate solutions?"}
-                  </Form.Label>
-                  <Col sm={3}>
-                    <Form.Check
-                      id="intermediate-switch"
-                      type="switch"
-                      label={
-                        computeIntermediate ? (
-                          <>
-                            {"no/"}
-                            <b>{"yes"}</b>
-                          </>
-                        ) : (
-                          <>
-                            <b>{"no"}</b>
-                            {"/yes"}
-                          </>
-                        )
-                      }
-                      checked={computeIntermediate}
-                      onChange={() =>
-                        SetComputeIntermediate(!computeIntermediate)
-                      }
-                    ></Form.Check>
-                  </Col>
-                  <Form.Label column sm={8}>
-                    {"Number of intermediate solutions:"}
-                  </Form.Label>
-                  <Col sm={3}>
-                    <Form.Control
-                      type="number"
-                      readOnly={!computeIntermediate}
-                      defaultValue={1}
-                      onChange={(v) => {
-                        const input = v.target.value;
-                        const parsed = parseInt(input);
-                        if (parsed !== NaN) {
-                          if (parsed > 0 && parsed <= 20) {
-                            SetNumberOfSolutions(parsed);
-                            SetHelpMessage(
-                              `Number of intermediate solutions to be computed in the next iteration set to ${parsed}`
-                            );
-                          } else {
-                            SetHelpMessage(
-                              "The number of solutions should be more than 0, but less than 20."
-                            );
-                          }
-                        }
-                      }}
-                    ></Form.Control>
-                  </Col>
-                  <Col sm={1} />
-                </Form.Group>
-              </Form>
-              <SolutionTableMultiSelect
-                objectiveData={newSolutions!}
-                activeIndices={selectedIndices}
-                setIndices={SetSelectedIndices}
-                tableTitle={""}
-              />
-            </Col>
-            <Col sm={6}>
-              <div className={"mt-1"}>
-                <ParallelAxes
-                  objectiveData={ToTrueValues(newSolutions!)}
-                  selectedIndices={selectedIndices}
-                  handleSelection={SetSelectedIndices}
-                />
-              </div>
-            </Col>
-          </Row>
-        </>
-      )}
-      {nimbusState === "select preferred" && (
+      {RVEAState === "select preferred" && (
         <>
           <Row>
             <Col sm={12}>
@@ -847,7 +627,7 @@ function NimbusMethod({
           </Row>
         </>
       )}
-      {nimbusState === "stop" && (
+      {RVEAState === "stop" && (
         <>
           <SolutionTable
             objectiveData={ParseSolutions([preferredPoint], activeProblemInfo)}
@@ -881,4 +661,4 @@ function NimbusMethod({
   );
 }
 
-export default NimbusMethod;
+export default RVEAClassificationMethod;

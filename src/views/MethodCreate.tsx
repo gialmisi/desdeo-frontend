@@ -91,6 +91,22 @@ function MethodCreate({
           methodName = "nautilus_navigator";
           break;
         }
+        case 3: {
+          methodName = "rvea";
+          break;
+        }
+        case 4: {
+          methodName = "irvea";
+          break;
+        }
+        case 5: {
+          methodName = "iopis";
+          break;
+        }
+        case 6: {
+          methodName = "rvea/class";
+          break;
+        }
         default: {
           throw Error(`Invalid methodKey: ${methodKey}`);
         }
@@ -176,6 +192,10 @@ function MethodCreate({
                       <option value={0}>Reference Point Method</option>
                       <option value={1}>Synchronous NIMBUS</option>
                       <option value={2}>Nautilus Navigator</option>
+                      <option value={3}>RVEA</option>
+                      <option value={4}>iRVEA</option>
+                      <option value={5}>IOPIS</option>
+                      <option value={6}>RVEA Classification</option>
                     </Form.Control>
                   </Form.Group>
                 </Col>
